@@ -6,7 +6,7 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="PodcastELE Pro - Versión Dual", layout="wide", page_icon="🎙️")
+st.set_page_config(page_title="PodcastELE Pro - Fix 2024", layout="wide", page_icon="🎙️")
 
 # --- FUNCIONES DE SOPORTE ---
 def limpiar_texto(texto):
@@ -85,45 +85,64 @@ if st.button("✨ Generar Material Completo"):
         st.warning("⚠️ Datos incompletos.")
     else:
         try:
-            with st.spinner("Gemini redactando ambas versiones..."):
-                url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key.strip()}"
-                res_models = requests.get(url_models).json()
-                modelos = [m["name"] for m in res_models.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+            with st.spinner("Conectando con la API y redactando..."):
+                # Intentamos listar modelos para encontrar el nombre exacto
+                url_list = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key.strip()}"
+                res_list = requests.get(url_list).json()
                 
-                modelo_final = "models/gemini-1.5-pro" if "models/gemini-1.5-pro" in modelos else "models/gemini-1.5-flash"
+                # Buscamos modelos que soporten generación de contenido
+                modelos = [m["name"] for m in res_list.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
                 
+                # Lógica de selección inteligente de modelo
+                modelo_final = ""
+                opciones = ["models/gemini-1.5-pro", "models/gemini-1.5-flash", "models/gemini-pro"]
+                
+                for opcion in opciones:
+                    if opcion in modelos:
+                        modelo_final = opcion
+                        break
+                
+                if not modelo_final and modelos:
+                    modelo_final = modelos[0]
+                
+                if not modelo_final:
+                    st.error("No se encontraron modelos compatibles en tu cuenta.")
+                    st.stop()
+
                 soporte = f"Usa el {idioma_apoyo} para traducciones." if idioma_apoyo != "Ninguno" else ""
                 
                 prompt = (
                     f"Eres editor ELE y guionista. Tema: {tema_input}. Nivel: {nivel_mcer}.\n"
                     f"ENTREGA ESTO:\n"
-                    f"1. # VERSIÓN PARA EL BLOG (ALUMNO): Cuento narrativo con rayas de diálogo, sin marcas de sonido.\n"
-                    f"2. # VERSIÓN GUION (PODCAST): Mismo cuento con [MÚSICA], [SFX] y voces.\n"
-                    f"3. # GLOSARIO Y EJERCICIOS: 10 términos al {idioma_apoyo} y comprensión.\n"
+                    f"1. # VERSIÓN PARA EL BLOG (ALUMNO): Cuento narrativo literario.\n"
+                    f"2. # VERSIÓN GUION (PODCAST): Guion con marcas [MÚSICA] y [SFX].\n"
+                    f"3. # GLOSARIO Y EJERCICIOS: 10 términos y actividades.\n"
                     f"4. # SOLUCIONARIO\n"
                     f"{soporte} {instrucciones_extra}. Firma: {nombre_profe}."
                 )
 
+                # Construcción de la URL de generación (Aseguramos el nombre completo del modelo)
                 url_gen = f"https://generativelanguage.googleapis.com/v1beta/{modelo_final}:generateContent?key={api_key.strip()}"
+                
                 res_gen = requests.post(url_gen, json={"contents": [{"parts": [{"text": prompt}]}]})
                 
                 if res_gen.status_code == 200:
                     st.session_state['material_podcast'] = res_gen.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    st.success("¡Contenido dual generado!")
+                    st.success(f"¡Contenido generado con {modelo_final}!")
                 else:
-                    st.error(f"Error API: {res_gen.text}")
+                    st.error(f"Error API ({res_gen.status_code}): {res_gen.text}")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error de conexión: {e}")
 
-# --- VISUALIZACIÓN Y DESCARGA ---
+# --- VISUALIZACIÓN ---
 if 'material_podcast' in st.session_state:
     st.divider()
     contenido = st.session_state['material_podcast']
     docx_bytes = generar_docx_podcast(contenido, nombre_escuela, nombre_profe, tema_input, nivel_mcer, logo_file=logo_subido)
     
-    st.download_button("📥 Descargar Todo (Word)", data=docx_bytes, file_name=f"ELE_{nivel_mcer}.docx")
+    st.download_button("📥 Descargar Material (Word)", data=docx_bytes, file_name=f"PodcastELE_{nivel_mcer}.docx")
 
-    t1, t2, t3 = st.tabs(["📖 Para el Blog", "🎙️ Para el Podcast", "📝 Ejercicios"])
+    t1, t2, t3 = st.tabs(["📖 Versión Alumno", "🎙️ Guion Podcast", "📝 Ejercicios"])
     
     with t1:
         if "# VERSIÓN PARA EL BLOG" in contenido:
@@ -133,7 +152,7 @@ if 'material_podcast' in st.session_state:
     with t2:
         if "# VERSIÓN GUION" in contenido:
             st.markdown(contenido.split("# VERSIÓN GUION")[1].split("# GLOSARIO")[0])
-        else: st.write("Guion no detectado por separado.")
+        else: st.write("Sección de guion no detectada.")
 
     with t3:
         if "# GLOSARIO" in contenido:
