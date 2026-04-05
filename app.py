@@ -92,24 +92,56 @@ with col2:
     duracion = st.select_slider("Duración estimada (lectura)", options=["3 min", "5 min", "10 min", "15 min"], value="5 min")
     genero = st.selectbox("Género literario", ["Misterio", "Romance", "Histórico", "Ciencia Ficción", "Fábula", "Humor"])
 
-# 1. Selección automática de modelo
+try:
+            with st.spinner("Conectando con Gemini y redactando..."):
+                # 1. Selección automática de modelo
                 # Usamos v1beta para asegurar que encuentre los modelos más recientes
                 url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key.strip()}"
                 res_models = requests.get(url_models).json()
-                modelos = [m["name"] for m in res_models.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
                 
-                # Intentamos Pro, si no, Flash, si no, el primero disponible
+                # Extraemos la lista de modelos disponibles
+                modelos_disponibles = [m["name"] for m in res_models.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+                
+                # Intentamos Pro, si no, Flash, si no, el primero de la lista
                 modelo_final = "models/gemini-1.5-pro"
-                if modelo_final not in modelos:
-                    modelo_final = "models/gemini-1.5-flash"
-                if not modelos:
-                    st.error("No se encontraron modelos disponibles para esta API Key.")
-                    st.stop()
+                if modelo_final not in modelos_disponibles:
+                    if "models/gemini-1.5-flash" in modelos_disponibles:
+                        modelo_final = "models/gemini-1.5-flash"
+                    elif modelos_disponibles:
+                        modelo_final = modelos_disponibles[0]
+                    else:
+                        st.error("No se encontraron modelos disponibles. Revisa tu API Key.")
+                        st.stop()
 
-                # 3. Llamada a la API (CORREGIDA A v1beta)
+                # 2. Construcción del Prompt
+                soporte = f"Usa el {idioma_apoyo} para traducir palabras difíciles." if idioma_apoyo != "Ninguno (100% Español)" else "Todo el material debe ser 100% en español."
+                
+                prompt = (
+                    f"Actúa como un guionista literario y profesor de ELE. Crea un material para podcast.\n"
+                    f"PROYECTO: {nombre_escuela}. NIVEL: {nivel_mcer}. TEMA: {tema_input}. GÉNERO: {genero}.\n"
+                    f"ESTRUCTURA REQUERIDA:\n"
+                    f"1. # TITULO DEL EPISODIO\n"
+                    f"2. # GUION DEL CUENTO: Redacta un cuento de aproximadamente {duracion}.\n"
+                    f"3. # GLOSARIO: 10 términos clave con definición y traducción al {idioma_apoyo}.\n"
+                    f"4. # EJERCICIOS: 3 preguntas de comprensión y un ejercicio de gramática.\n"
+                    f"5. # SOLUCIONARIO: Respuestas correctas.\n"
+                    f"6. # NOTAS DEL NARRADOR: Consejos sobre entonación.\n"
+                    f"{soporte}\n{instrucciones_extra}\nFirma: {nombre_profe}."
+                )
+
+                # 3. Llamada a la API (v1beta)
                 url_gen = f"https://generativelanguage.googleapis.com/v1beta/{modelo_final}:generateContent?key={api_key.strip()}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 res_gen = requests.post(url_gen, json=payload)
+                
+                if res_gen.status_code == 200:
+                    st.session_state['material_podcast'] = res_gen.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    st.success(f"¡Contenido generado con {modelo_final}!")
+                else:
+                    st.error(f"Error de API ({res_gen.status_code}): {res_gen.text}")
+
+        except Exception as e:
+            st.error(f"Hubo un error de ejecución: {e}")
 
 # --- ÁREA DE DESCARGA Y VISUALIZACIÓN ---
 if 'material_podcast' in st.session_state:
