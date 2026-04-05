@@ -111,31 +111,58 @@ if st.button("✨ Generar Guion y Material Pedagógico"):
                 soporte = f"Usa el {idioma_apoyo} para traducir palabras difíciles." if idioma_apoyo != "Ninguno (100% Español)" else "Todo el material debe ser 100% en español."
                 
                 prompt = (
-                    f"Actúa como guionista y profesor de ELE. Crea material para podcast.\n"
-                    f"PROYECTO: {nombre_escuela}. NIVEL: {nivel_mcer}. TEMA: {tema_input}. GÉNERO: {genero}.\n"
-                    f"ESTRUCTURA:\n1. # TITULO\n2. # GUION: Cuento de {duracion}.\n3. # GLOSARIO: 10 términos con traducción al {idioma_apoyo}.\n"
-                    f"4. # EJERCICIOS: Comprensión y gramática.\n5. # SOLUCIONARIO\n6. # NOTAS DEL NARRADOR.\n"
-                    f"{soporte}\n{instrucciones_extra}\nFirma: {nombre_profe}."
+                    f"Actúa como un editor de libros ELE y guionista de podcast. Crea material pedagógico sobre: {tema_input}.\n"
+                    f"PROYECTO: {nombre_escuela}. NIVEL: {nivel_mcer}. GÉNERO: {genero}.\n\n"
+                    f"REGLA CRÍTICA: Debes entregar el cuento en DOS FORMATOS distintos.\n\n"
+                    f"ESTRUCTURA REQUERIDA:\n"
+                    f"1. # VERSIÓN PARA EL BLOG (ALUMNO)\n"
+                    f"Escribe el cuento en formato narrativo literario. Usa rayas de diálogo (—). SIN acotaciones de sonido. El lenguaje debe ser fluido y atractivo para leer.\n\n"
+                    f"2. # VERSIÓN GUION (PODCAST)\n"
+                    f"Escribe el mismo cuento pero adaptado para locución. Incluye marcas de [MÚSICA], [SFX] y voces de [NARRADOR] y [PERSONAJES].\n\n"
+                    f"3. # GLOSARIO Y EJERCICIOS\n"
+                    f"Incluye 10 términos con traducción al {idioma_apoyo}, 5 preguntas de comprensión y ejercicios de gramática.\n\n"
+                    f"4. # SOLUCIONARIO\n"
+                    f"{soporte}\nFirma: {nombre_profe}."
                 )
 
-                url_gen = f"https://generativelanguage.googleapis.com/v1beta/{modelo_final}:generateContent?key={api_key.strip()}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                res_gen = requests.post(url_gen, json=payload)
-                
-                if res_gen.status_code == 200:
-                    st.session_state['material_podcast'] = res_gen.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    st.success(f"¡Contenido generado con {modelo_final}!")
-                else:
-                    st.error(f"Error ({res_gen.status_code}): {res_gen.text}")
-
-        except Exception as e:
-            st.error(f"Error de ejecución: {e}")
-
-# --- VISUALIZACIÓN ---
+# --- SECCIÓN DE VISUALIZACIÓN ACTUALIZADA (CON PESTAÑAS) ---
 if 'material_podcast' in st.session_state:
     st.divider()
-    docx_bytes = generar_docx_podcast(st.session_state['material_podcast'], nombre_escuela, nombre_profe, tema_input, nivel_mcer, logo_file=logo_subido)
     
-    st.download_button(label="📥 Descargar Guion (Word)", data=docx_bytes, file_name=f"Podcast_{tema_input[:20]}.docx")
-    st.markdown("### 📝 Vista previa")
-    st.markdown(st.session_state['material_podcast'])
+    # Generar el Word (el Word incluirá todo el contenido generado)
+    docx_bytes = generar_docx_podcast(
+        st.session_state['material_podcast'], 
+        nombre_escuela, 
+        nombre_profe, 
+        tema_input, 
+        nivel_mcer, 
+        logo_file=logo_subido
+    )
+    
+    st.download_button(label="📥 Descargar Todo en Word", data=docx_bytes, file_name=f"Material_ELE_{nivel_mcer}.docx")
+
+    # Pestañas para que el profesor elija qué ver/copiar
+    tab1, tab2, tab3 = st.tabs(["📖 Versión Alumno (Blog)", "🎙️ Guion Podcast", "📝 Ejercicios y Glosario"])
+
+    with tab1:
+        st.info("💡 Este texto está listo para tu blog. No tiene marcas de sonido.")
+        # Intentamos extraer solo la sección del alumno
+        contenido = st.session_state['material_podcast']
+        if "# VERSIÓN PARA EL BLOG" in contenido:
+            parte_alumno = contenido.split("# VERSIÓN PARA EL BLOG")[1].split("# VERSIÓN GUION")[0]
+            st.markdown(parte_alumno)
+        else:
+            st.markdown(contenido)
+
+    with tab2:
+        st.warning("🎧 Usa esta versión para grabar tu audio. Incluye efectos y música.")
+        if "# VERSIÓN GUION" in contenido:
+            parte_guion = contenido.split("# VERSIÓN GUION")[1].split("# GLOSARIO")[0]
+            st.markdown(parte_guion)
+        else:
+            st.write("Genera de nuevo para ver el formato dividido.")
+
+    with tab3:
+        if "# GLOSARIO" in contenido:
+            parte_ejercicios = contenido.split("# GLOSARIO")[1]
+            st.markdown("# GLOSARIO" + parte_ejercicios)
