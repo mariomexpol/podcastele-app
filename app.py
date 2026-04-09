@@ -6,7 +6,7 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="PodcastELE Pro - Fix 2024", layout="wide", page_icon="🎙️")
+st.set_page_config(page_title="PodcastELE Pro", layout="wide", page_icon="🎙️")
 
 # --- FUNCIONES DE SOPORTE ---
 def limpiar_texto(texto):
@@ -71,8 +71,8 @@ st.title("🎙️ PodcastELE Pro: Dual (Blog + Podcast)")
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    tema_input = st.text_area("Tema/Idea", placeholder="Ej: Marga viaja a México...")
-    instrucciones_extra = st.text_input("Extras", placeholder="Ej: Final abierto...")
+    tema_input = st.text_area("Tema/Idea", placeholder="Ej: Marga viaja a México (Parte X)...")
+    instrucciones_extra = st.text_input("Extras", placeholder="Ej: Usar el contraste de pasados...")
 
 with col2:
     nivel_mcer = st.selectbox("Nivel", ["A1", "A2", "B1", "B2", "C1", "C2"])
@@ -86,17 +86,13 @@ if st.button("✨ Generar Material Completo"):
     else:
         try:
             with st.spinner("Conectando con la API y redactando..."):
-                # Intentamos listar modelos para encontrar el nombre exacto
                 url_list = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key.strip()}"
                 res_list = requests.get(url_list).json()
-                
-                # Buscamos modelos que soporten generación de contenido
                 modelos = [m["name"] for m in res_list.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
                 
-                # Lógica de selección inteligente de modelo
+                # PRIORIDAD A FLASH PARA EVITAR ERROR 503
                 modelo_final = ""
-                opciones = ["models/gemini-1.5-pro", "models/gemini-1.5-flash", "models/gemini-pro"]
-                
+                opciones = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
                 for opcion in opciones:
                     if opcion in modelos:
                         modelo_final = opcion
@@ -104,26 +100,20 @@ if st.button("✨ Generar Material Completo"):
                 
                 if not modelo_final and modelos:
                     modelo_final = modelos[0]
-                
-                if not modelo_final:
-                    st.error("No se encontraron modelos compatibles en tu cuenta.")
-                    st.stop()
 
-                soporte = f"Usa el {idioma_apoyo} para traducciones." if idioma_apoyo != "Ninguno" else ""
+                soporte = f"Usa el {idioma_apoyo} para traducciones en el glosario." if idioma_apoyo != "Ninguno" else ""
                 
                 prompt = (
                     f"Eres editor ELE y guionista. Tema: {tema_input}. Nivel: {nivel_mcer}.\n"
-                    f"ENTREGA ESTO:\n"
-                    f"1. # VERSIÓN PARA EL BLOG (ALUMNO): Cuento narrativo literario.\n"
-                    f"2. # VERSIÓN GUION (PODCAST): Guion con marcas [MÚSICA] y [SFX].\n"
-                    f"3. # GLOSARIO Y EJERCICIOS: 10 términos y actividades.\n"
+                    f"ENTREGA ESTO EN ESTE ORDEN EXACTO:\n"
+                    f"1. # VERSIÓN PARA EL BLOG (ALUMNO): Cuento narrativo literario con rayas de diálogo. SIN marcas de sonido.\n"
+                    f"2. # VERSIÓN GUION (PODCAST): Guion completo con marcas [MÚSICA] y [SFX].\n"
+                    f"3. # GLOSARIO Y EJERCICIOS: 10 términos traducidos al {idioma_apoyo} y actividades pedagógicas.\n"
                     f"4. # SOLUCIONARIO\n"
                     f"{soporte} {instrucciones_extra}. Firma: {nombre_profe}."
                 )
 
-                # Construcción de la URL de generación (Aseguramos el nombre completo del modelo)
                 url_gen = f"https://generativelanguage.googleapis.com/v1beta/{modelo_final}:generateContent?key={api_key.strip()}"
-                
                 res_gen = requests.post(url_gen, json={"contents": [{"parts": [{"text": prompt}]}]})
                 
                 if res_gen.status_code == 200:
@@ -147,13 +137,17 @@ if 'material_podcast' in st.session_state:
     with t1:
         if "# VERSIÓN PARA EL BLOG" in contenido:
             st.markdown(contenido.split("# VERSIÓN PARA EL BLOG")[1].split("# VERSIÓN GUION")[0])
-        else: st.markdown(contenido)
+        else:
+            st.markdown(contenido)
 
     with t2:
         if "# VERSIÓN GUION" in contenido:
             st.markdown(contenido.split("# VERSIÓN GUION")[1].split("# GLOSARIO")[0])
-        else: st.write("Sección de guion no detectada.")
+        else:
+            st.info("Copia el texto completo de la primera pestaña para ver el guion.")
 
     with t3:
         if "# GLOSARIO" in contenido:
             st.markdown("# GLOSARIO" + contenido.split("# GLOSARIO")[1])
+        elif "# EJERCICIOS" in contenido:
+            st.markdown("# EJERCICIOS" + contenido.split("# EJERCICIOS")[1])
